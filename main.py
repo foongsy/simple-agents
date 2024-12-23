@@ -14,6 +14,7 @@ from langchain import hub
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langchain_together import ChatTogether
 
 from langgraph.graph import END, StateGraph, START
@@ -22,6 +23,8 @@ from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
 from langgraph.prebuilt import tools_condition
+
+import chainlit as cl
 
 import logging
 from dotenv import load_dotenv
@@ -36,7 +39,7 @@ urls = [
     "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
 ]
 
-docs = [WebBaseLoader(url).load() for url in urls]
+docs = [WebBaseLoader(url, verify_ssl=False).load() for url in urls]
 docs_list = [item for sublist in docs for item in sublist]
 
 embedding_model = 'Alibaba-NLP/gte-base-en-v1.5'
@@ -257,6 +260,23 @@ workflow.add_edge("rewrite", "agent")
 # Compile
 graph = workflow.compile()
 
+# Adding chainlit logic
+@cl.on_message
+async def on_message(msg: cl.Message):
+    config = {"configurable": {"thread_id": cl.context.session.id}}
+    cb = cl.LangchainCallbackHandler()
+    final_answer = cl.Message(content="")
+    
+    for msg, metadata in graph.stream({"messages": [HumanMessage(content=msg.content)]}, stream_mode="messages", config=RunnableConfig(callbacks=[cb], **config)):
+        if (
+            msg.content
+            and not isinstance(msg, HumanMessage)
+            and metadata["langgraph_node"] == "generate"
+        ):
+            await final_answer.stream_token(msg.content)
+
+    await final_answer.send()
+"""
 import pprint
 
 inputs = {
@@ -270,3 +290,4 @@ for output in graph.stream(inputs):
         pprint.pprint("---")
         pprint.pprint(value, indent=2, width=80, depth=None)
     pprint.pprint("\n---\n")
+"""
