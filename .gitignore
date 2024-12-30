@@ -171,5 +171,4 @@ cython_debug/
 .pypirc
 .chainlit/
 chainlit.md
-*.json.chainlit/
-chainlit.md
+*.json
